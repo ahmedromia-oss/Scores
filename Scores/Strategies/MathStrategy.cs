@@ -1,7 +1,9 @@
 ﻿using Scores.Enums;
-using Scores.Strategies;
 
-public class MathsSortingStrategy : EnumSortingStrategy<MathsScore>
+namespace Scores.Strategies
 {
-    public MathsSortingStrategy() : base() { }
+    public class MathsSortingStrategy : EnumSortingStrategy<MathsScore>
+    {
+        public MathsSortingStrategy() : base() { }
+    }
 }

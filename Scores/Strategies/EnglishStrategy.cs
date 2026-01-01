@@ -1,7 +1,9 @@
 ﻿using Scores.Enums;
-using Scores.Strategies;
 
-public class EnglishSortingStrategy : EnumSortingStrategy<EnglishScore>
+namespace Scores.Strategies
 {
-    public EnglishSortingStrategy() : base(preprocessScore: s => s.Replace(" ", "")) { }
+    public class EnglishSortingStrategy : EnumSortingStrategy<EnglishScore>
+    {
+        public EnglishSortingStrategy() : base() { }
+    }
 }

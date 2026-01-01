@@ -2,36 +2,56 @@
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
+using Scores.Interfaces;
 using Scores.Models;
 
 namespace Scores
 {
-    public class JsonHelper
+    public class JsonHelper : IJsonHelper
     {
-        // Convert StudentSubject list to JSON string
+        private readonly ILogger<JsonHelper> _logger;
+
+        public JsonHelper(ILogger<JsonHelper> logger)
+        {
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
+
         public string ConvertToJson(List<StudentSubject> studentSubjects)
         {
+            _logger.LogInformation("Converting {Count} student subjects to JSON", studentSubjects.Count);
+
             var options = new JsonSerializerOptions
             {
-                WriteIndented = true, // Pretty print
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase, // camelCase properties
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             };
 
-            return JsonSerializer.Serialize(studentSubjects, options);
+            var json = JsonSerializer.Serialize(studentSubjects, options);
+            _logger.LogDebug("JSON conversion completed successfully");
+            return json;
         }
 
-        // Save JSON to file
-        public void SaveToFile(string json, string filePath)
+        public async Task SaveToFileAsync(string json, string filePath)
         {
-            System.IO.File.WriteAllText(filePath, json);
-            Console.WriteLine($"JSON saved to: {filePath}");
+            _logger.LogInformation("Saving JSON to file: {FilePath}", filePath);
+            
+            try
+            {
+                await File.WriteAllTextAsync(filePath, json);
+                _logger.LogInformation("JSON successfully saved to: {FilePath}", filePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to save JSON to file: {FilePath}", filePath);
+                throw;
+            }
         }
 
-        // Display JSON in console
         public void DisplayJson(string json)
         {
-            Console.WriteLine("Generated JSON:");
+            _logger.LogInformation("Displaying generated JSON:");
             Console.WriteLine(json);
         }
     }

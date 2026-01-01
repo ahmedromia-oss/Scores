@@ -1,136 +1,128 @@
-﻿using Scores.Models;
+﻿using CsvHelper;
+using CsvHelper.Configuration;
+using Microsoft.Extensions.Logging;
+using Scores.Interfaces;
+using Scores.Models;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text;
+using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace Scores
 {
-    public class CSVHelper
+  
+
+    public class CSVHelper : ICSVHelper
     {
-        public List<StudentScoreRow> ReadCSV(string filePath, int chunkSize = 10)
+        private readonly ILogger<CSVHelper> _logger;
+
+        public CSVHelper(ILogger<CSVHelper> logger)
         {
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
+
+        public async Task<List<StudentScoreRow>> ReadCSVAsync(string filePath)
+        {
+            ValidateFilePath(filePath);
+            
             var rows = new List<StudentScoreRow>();
-
-            try
+            await foreach (var row in ReadCSVInChunksAsync(filePath))
             {
-                var lines = File.ReadLines(filePath).Skip(1); // Skip header
-                var currentChunk = new List<string>();
-                int lineNumber = 1;
-
-                foreach (var line in lines)
-                {
-                    currentChunk.Add(line);
-                    lineNumber++;
-                    
-
-                    if (currentChunk.Count >= chunkSize)
-                    {
-                        ProcessChunk(currentChunk, rows, lineNumber - chunkSize);
-                        currentChunk.Clear();
-                    }
-                }
-
-                // Process remaining lines
-                if (currentChunk.Count > 0)
-                {
-                    ProcessChunk(currentChunk, rows, lineNumber - currentChunk.Count);
-                }
+                rows.Add(row);
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error reading CSV file: {ex.Message}");
-                throw;
-            }
-
             return rows;
         }
 
-        private void ProcessChunk(List<string> chunk, List<StudentScoreRow> rows, int startLineNumber)
+        public async IAsyncEnumerable<StudentScoreRow> ReadCSVInChunksAsync(
+            string filePath, 
+            int chunkSize = 100)
         {
-            try
-            {
-                Console.WriteLine($"Processing chunk starting at line {startLineNumber}...");
+            ValidateFilePath(filePath);
 
-                for (int i = 0; i < chunk.Count; i++)
+            if (!File.Exists(filePath))
+            {
+                _logger.LogError("CSV file not found: {FilePath}", filePath);
+                throw new FileNotFoundException($"CSV file not found: {filePath}");
+            }
+
+            _logger.LogInformation("Starting CSV processing from {FilePath} with chunk size {ChunkSize}", filePath, chunkSize);
+
+            int processedCount = 0;
+            int errorCount = 0;
+
+            var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+            {
+                HasHeaderRecord = true,
+                MissingFieldFound = null,
+                BadDataFound = context =>
                 {
+                    errorCount++;
+                    _logger.LogWarning("Bad data found at row {RowNumber}: {RawRecord}", 
+                        context.Context.Parser.Row, context.RawRecord);
+                }
+            };
+
+            using var reader = new StreamReader(filePath);
+            using var csv = new CsvReader(reader, config);
+            
+            csv.Context.RegisterClassMap<StudentScoreRowMap>();
+
+            var records = csv.GetRecordsAsync<StudentScoreRow>();
+
+            await foreach (var record in records)
+            {
+
+                if (record != null && IsValidRecord(record))
+                {
+                    processedCount++;
                     
-
-                    var row = ParseLine(chunk[i]);
-                    if (row != null)
+                    if (processedCount % chunkSize == 0)
                     {
-                        rows.Add(row);
+                        _logger.LogDebug("Processed {Count} records", processedCount);
                     }
-                    else
-                    {
-                        Console.WriteLine($"Warning: Skipped invalid line {startLineNumber + i}");
-                    }
-                }
-
-                Console.WriteLine($"Successfully processed {chunk.Count} rows");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error processing chunk starting at line {startLineNumber}: {ex.Message}");
-                Console.WriteLine("Stopping further processing due to error in chunk.");
-                throw;
-            }
-        }
-
-        private StudentScoreRow ParseLine(string line)
-        {
-            if (string.IsNullOrWhiteSpace(line))
-                return null;
-
-            var values = SplitCSVLine(line);
-
-            if (values.Length < 5)
-                return null;
-
-            try
-            {
-                return new StudentScoreRow
-                {
-                    StudentId = int.Parse(values[0].Trim()),
-                    Name = values[1].Trim(),
-                    LearningObjective = values[2].Trim(),
-                    Score = values[3].Trim(),
-                    Subject = values[4].Trim()
-                };
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error parsing line: {line}. Error: {ex.Message}");
-                return null;
-            }
-        }
-
-        private string[] SplitCSVLine(string line)
-        {
-            var result = new List<string>();
-            var currentField = new StringBuilder();
-            bool inQuotes = false;
-
-            foreach (char c in line)
-            {
-                if (c == '"')
-                {
-                    inQuotes = !inQuotes;
-                }
-                else if (c == ',' && !inQuotes)
-                {
-                    result.Add(currentField.ToString());
-                    currentField.Clear();
+                    
+                    yield return record;
                 }
                 else
                 {
-                    currentField.Append(c);
+                    errorCount++;
+                    _logger.LogWarning("Skipped invalid record at row {RowNumber}", csv.Context.Parser.Row);
                 }
             }
 
-            result.Add(currentField.ToString());
-            return result.ToArray();
+            _logger.LogInformation("CSV processing completed. Total rows processed: {Count}, Errors: {ErrorCount}", 
+                processedCount, errorCount);
+        }
+
+        private void ValidateFilePath(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
+            }
+
+            var fullPath = Path.GetFullPath(filePath);
+            if (fullPath != filePath && !Path.IsPathRooted(filePath))
+            {
+                _logger.LogWarning("Potential path traversal attempt detected: {FilePath}", filePath);
+            }
+
+            if (filePath.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
+            {
+                throw new ArgumentException("File path contains invalid characters.", nameof(filePath));
+            }
+        }
+
+        private bool IsValidRecord(StudentScoreRow record)
+        {
+            return record.StudentId > 0 &&
+                   !string.IsNullOrWhiteSpace(record.Name) &&
+                   !string.IsNullOrWhiteSpace(record.Subject) &&
+                   !string.IsNullOrWhiteSpace(record.Score) &&
+                   !string.IsNullOrWhiteSpace(record.LearningObjective);
         }
     }
 }

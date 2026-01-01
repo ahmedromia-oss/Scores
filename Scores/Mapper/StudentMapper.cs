@@ -1,30 +1,32 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using Scores.Factories;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Scores.Interfaces;
 using Scores.Models;
 
 namespace Scores
 {
-    public class StudentMapper
+    public class StudentMapper : IStudentMapper
     {
-        private readonly SortingStrategyFactory _strategyFactory;
+        private readonly ISortingStrategyFactory _strategyFactory;
+        private readonly ILogger<StudentMapper> _logger;
 
-        public StudentMapper()
+        public StudentMapper(ISortingStrategyFactory strategyFactory, ILogger<StudentMapper> logger)
         {
-            _strategyFactory = new SortingStrategyFactory();
+            _strategyFactory = strategyFactory ?? throw new ArgumentNullException(nameof(strategyFactory));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
-        // Map list of StudentScoreRow to list of StudentSubject
-        public List<StudentSubject> MapToStudentSubjects(List<StudentScoreRow> rows)
+
+        public Task<List<StudentSubject>> MapToStudentSubjectsAsync(List<StudentScoreRow> rows)
         {
-            var studentSubjects = new List<StudentSubject>();
+            _logger.LogInformation("Mapping {Count} rows to student subjects", rows.Count);
 
-            // Group by StudentId and Subject (since one student can have multiple subjects)
-            var grouped = rows.GroupBy(r => new { r.StudentId, r.Name, r.Subject });
-
-            foreach (var group in grouped)
-            {
-                var studentSubject = new StudentSubject
+            var studentSubjects = rows
+                .GroupBy(r => new { r.StudentId, r.Name, r.Subject })
+                .AsParallel()
+                .Select(group => new StudentSubject
                 {
                     StudentId = group.Key.StudentId,
                     StudentName = group.Key.Name,
@@ -34,25 +36,30 @@ namespace Scores
                         LearningObjective = r.LearningObjective,
                         Score = r.Score
                     }).ToList()
-                };
+                })
+                .ToList();
 
-                studentSubjects.Add(studentSubject);
-            }
-
-            return studentSubjects;
+            _logger.LogInformation("Mapped to {Count} student subjects", studentSubjects.Count);
+            return Task.FromResult(studentSubjects);
         }
 
-        // Map and sort scores based on subject
-        public List<StudentSubject> MapAndSortScores(List<StudentScoreRow> rows)
+        public async Task<List<StudentSubject>> MapAndSortScoresAsync(List<StudentScoreRow> rows)
         {
-            var studentSubjects = MapToStudentSubjects(rows);
+            _logger.LogInformation("Starting mapping and sorting process for {Count} rows", rows.Count);
 
-            foreach (var student in studentSubjects)
+            var studentSubjects = await MapToStudentSubjectsAsync(rows);
+
+            await Task.Run(() =>
             {
-                var strategy = _strategyFactory.GetStrategy(student.Subject);
-                student.Scores = strategy.SortScores(student.Scores);
-            }
+                System.Threading.Tasks.Parallel.ForEach(studentSubjects, student =>
+                {
+                    _logger.LogDebug("Sorting scores for student {StudentId} - {Subject}", student.StudentId, student.Subject);
+                    var strategy = _strategyFactory.GetStrategy(student.Subject);
+                    student.Scores = strategy.SortScores(student.Scores);
+                });
+            });
 
+            _logger.LogInformation("Mapping and sorting completed successfully");
             return studentSubjects;
         }
     }

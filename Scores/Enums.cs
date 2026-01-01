@@ -1,9 +1,6 @@
 ﻿namespace Scores.Enums
 {
-    public interface IScoreEnum
-    {
-        int GetSortOrder();
-    }
+    
 
     public enum EnglishScore
     {
