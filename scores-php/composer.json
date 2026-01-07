@@ -1,0 +1,21 @@
+{
+    "name": "scores/student-processor",
+    "description": "Student scores processing application in PHP",
+    "type": "project",
+    "require": {
+        "php": ">=8.0",
+        "monolog/monolog": "^3.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Scores\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Your Name"
+        }
+    ],
+    "minimum-stability": "stable"
+}
+

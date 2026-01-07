@@ -1,0 +1,8 @@
+/vendor/
+/logs/*.log
+composer.lock
+.DS_Store
+*.swp
+*.swo
+*~
+

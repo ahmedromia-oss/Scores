@@ -55,7 +55,7 @@ namespace Scores
                 }
 
                 logger.LogInformation("Processing completed successfully!");
-                Console.WriteLine("\n✅ Processing completed successfully!");
+                Console.WriteLine("\n Processing completed successfully!");
 
                 return 0;
             }
