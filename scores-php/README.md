@@ -227,26 +227,6 @@ JSON output grouped by student and subject:
 ---
 
 
-## Dependencies
 
-- **monolog/monolog** - Logging library (PHP equivalent of Serilog)
-
----
-
-## Troubleshooting
-
-### "File not found" error
-- Check the path in `config/config.php`
-- Verify the file exists
-
-### "Class not found" error
-- Run `composer install` to install dependencies
-- Check autoloading with `composer dump-autoload`
-
-### Permission errors
-- Ensure write permissions on `logs/` folder
-- Check output directory permissions
-
----
 
 
